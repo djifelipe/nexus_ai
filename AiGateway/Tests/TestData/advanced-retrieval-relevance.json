@@ -1,0 +1,10 @@
+[
+  { "intent": "HowTo", "question": "Como cancelar uma NF-e?", "expectedPriority": ["workflow", "business-rule"] },
+  { "intent": "Explanation", "question": "O que é contingência fiscal?", "expectedPriority": ["documentation", "business-rule"] },
+  { "intent": "PermissionCheck", "question": "Posso cancelar esta NF-e?", "expectedPriority": ["permission", "workflow"] },
+  { "intent": "ImpactAnalysis", "question": "O que muda ao cancelar a NF-e?", "expectedPriority": ["graph-path", "business-rule"] },
+  { "intent": "Unknown", "question": "Como faço o cancelamento?", "expectedOutcome": "clarification" },
+  { "intent": "HowTo", "question": "Procedimento inexistente", "expectedOutcome": "insufficient-knowledge" },
+  { "intent": "PermissionCheck", "question": "Fonte sem permissão", "expectedOutcome": "access-denied" },
+  { "intent": "HowTo", "question": "Falha externa", "expectedOutcome": "dependency-failure" }
+]

@@ -1,9 +1,4 @@
-# Hybrid Knowledge Retrieval Specification
-
-## Purpose
-Define secure, tenant-filtered retrieval through the designated MCP servers with bounded context and controlled failures.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Knowledge access through the KB MCP server
 The retriever SHALL query structured knowledge, pgvector semantic chunks, and knowledge graph capabilities exclusively through `supabase-mcp-server_kb` and return ordered, traceable knowledge items with source IDs, graph paths, per-strategy scores, final scores, and retrieval diagnostics. The application MUST NOT open a direct database or graph-store connection or hold a knowledge-base connection string.
@@ -15,13 +10,6 @@ The retriever SHALL query structured knowledge, pgvector semantic chunks, and kn
 #### Scenario: Direct knowledge-store access is attempted
 - **WHEN** an application component attempts to open PostgreSQL, Supabase, pgvector, or the knowledge graph directly
 - **THEN** architecture validation fails and the component must use `supabase-mcp-server_kb`
-
-### Requirement: ERP database segregation
-Any access to transactional or master ERP data MUST use `supabase-mcp-server_ts` exclusively. Phase 1 SHALL NOT register or invoke that server because ERP data tools are outside the MVP.
-
-#### Scenario: Phase 1 processes a knowledge question
-- **WHEN** the Phase 1 pipeline retrieves sources and generates an answer
-- **THEN** it invokes only `supabase-mcp-server_kb` and never invokes `supabase-mcp-server_ts`
 
 ### Requirement: Mandatory access and publication filters
 Every structured, vector, and graph request to `supabase-mcp-server_kb` MUST include authenticated tenant, company ERP version, effective permissions, language, active status, publication status, validity dates, and content type. These filters MUST apply before candidates are returned, ranked, fused, deduplicated, cached, logged, or sent to the model.
@@ -41,6 +29,8 @@ Every structured, vector, and graph request to `supabase-mcp-server_kb` MUST inc
 #### Scenario: Permission context is ambiguous or unavailable
 - **WHEN** effective permissions cannot be derived deterministically from authenticated context
 - **THEN** retrieval fails closed with a controlled authorization error and performs no unfiltered fallback
+
+## ADDED Requirements
 
 ### Requirement: Intent-sensitive score fusion
 The retriever SHALL normalize structured, vector, and graph scores to a common range and calculate an explainable final score using a versioned deterministic weight policy selected by intent. Configured weights MUST be validated and sum to 1 for each policy.
@@ -101,21 +91,3 @@ The retriever SHALL record durations, candidate counts, normalized and final sco
 #### Scenario: No authorized knowledge remains
 - **WHEN** filtering and deduplication leave no authorized candidate
 - **THEN** the retriever returns a successful empty result that maps to insufficient knowledge without revealing filtered candidates
-
-### Requirement: Retrieval budgets
-The retriever SHALL enforce configurable result and context budgets, defaulting to 15 items and 8000 estimated context tokens, and SHALL preserve the highest-priority authorized sources.
-
-#### Scenario: Candidates exceed budget
-- **WHEN** authorized candidates exceed either configured budget
-- **THEN** lower-priority candidates are omitted and diagnostics report the applied limits without truncating a critical rule mid-content
-
-### Requirement: Retrieval failure behavior
-The retriever MUST distinguish no authorized knowledge from dependency failure and SHALL target completion within 800 ms under the acceptance-test workload.
-
-#### Scenario: No authorized knowledge
-- **WHEN** all matching sources are filtered out or no source matches
-- **THEN** the retriever returns an empty successful result that the pipeline can map to insufficient knowledge
-
-#### Scenario: KB MCP server unavailable
-- **WHEN** `supabase-mcp-server_kb` is unavailable or the retrieval timeout expires
-- **THEN** the retriever returns a controlled dependency error and no unfiltered fallback data

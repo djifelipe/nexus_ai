@@ -42,10 +42,24 @@ public sealed record KnowledgeItem(
     double SqlScore,
     double FinalScore,
     bool IsCritical,
-    IReadOnlyDictionary<string, string> Metadata);
+    IReadOnlyDictionary<string, string> Metadata)
+{
+    public double GraphScore { get; init; }
+    public IReadOnlyList<ScoreContribution> ScoreContributions { get; init; } = [];
+    public IReadOnlyList<GraphPath> GraphPaths { get; init; } = [];
+    public IReadOnlyList<SuppressedSource> SuppressedSources { get; init; } = [];
+    public string RankingPolicyVersion { get; init; } = "phase-1";
+}
 
-public sealed record RetrievalDiagnostics(IReadOnlyList<string> Strategies, IReadOnlyList<string> AppliedFilters, int CandidateCount, bool ResultLimitApplied, bool TokenLimitApplied);
-public sealed record RetrievalResult(IReadOnlyList<KnowledgeItem> Items, RetrievalDiagnostics Diagnostics);
+public sealed record RetrievalDiagnostics(IReadOnlyList<string> Strategies, IReadOnlyList<string> AppliedFilters, int CandidateCount, bool ResultLimitApplied, bool TokenLimitApplied)
+{
+    public AdvancedRetrievalDiagnostics Advanced { get; init; } = AdvancedRetrievalDiagnostics.PhaseOne;
+}
+public sealed record RetrievalResult(IReadOnlyList<KnowledgeItem> Items, RetrievalDiagnostics Diagnostics)
+{
+    public string KnowledgeRevision { get; init; } = "unknown";
+    public RetrievalAccessScope? AccessScope { get; init; }
+}
 public sealed record PromptMessage(string Role, string Content);
 public sealed record PromptPackage(IReadOnlyList<PromptMessage> Messages, IReadOnlyList<KnowledgeItem> Sources, int EstimatedTokens, string OriginalQuestion);
 public sealed record ModelResponse(string Content, int? PromptTokens, int? CompletionTokens, string? FinishReason, bool HasToolCalls, double? FirstTokenLatencyMs);
@@ -56,7 +70,11 @@ public sealed record AiResponse(string RequestId, string? ConversationId, string
 
 public sealed record AiRequest(string? ConversationId, string Message, string CompanyId, string UserId, ScreenContext Screen, bool Stream, bool IncludeSources, UserContext UserContext, string RequestId, string TraceId);
 public sealed record IntentRouterRequest(string Question, UserContext UserContext);
-public sealed record RetrievalRequest(string Question, IntentResult Intent, UserContext UserContext, int MaxResults = 15, int MaxContextTokens = 8000);
+public sealed record RetrievalRequest(string Question, IntentResult Intent, UserContext UserContext, int MaxResults = 15, int MaxContextTokens = 8000)
+{
+    public IReadOnlySet<string> AllowedContentTypes { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    { "workflow", "business-rule", "faq", "example", "documentation", "permission", "validation", "exception" };
+}
 public sealed record PromptBuildRequest(string Question, IntentResult Intent, RetrievalResult Retrieval, UserContext UserContext, string? ConversationSummary = null);
 public sealed record ResponseValidationRequest(ModelResponse ModelResponse, PromptPackage Prompt);
 
@@ -73,6 +91,9 @@ public static class ErrorCodes
     public const string OllamaInvalidResponse = "AI_OLLAMA_INVALID_RESPONSE";
     public const string InvalidCitation = "AI_INVALID_CITATION";
     public const string UnsupportedTool = "AI_TOOL_UNSUPPORTED";
+    public const string RetrievalAccessContextInvalid = "AI_RETRIEVAL_ACCESS_CONTEXT_INVALID";
+    public const string RetrievalFilterIntegrity = "AI_RETRIEVAL_FILTER_INTEGRITY";
+    public const string GraphUnavailable = "AI_GRAPH_UNAVAILABLE";
 }
 
 public sealed class AiGatewayException(string code, string safeMessage, Exception? innerException = null) : Exception(safeMessage, innerException)

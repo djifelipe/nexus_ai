@@ -15,6 +15,46 @@ public sealed class AiGatewayOptions
     [Range(1, 300)] public int TotalTimeoutSeconds { get; init; } = 10;
 }
 
+public sealed class AdvancedRetrievalOptions
+{
+    public const string SectionName = "AdvancedRetrieval";
+    public bool AdvancedRankingEnabled { get; init; }
+    public bool GraphEnabled { get; init; }
+    public bool SearchCacheEnabled { get; init; }
+    public bool ResponseCacheEnabled { get; init; }
+    public bool ShadowModeEnabled { get; init; }
+    [Range(1, 4)] public int GraphDepth { get; init; } = 2;
+    [Range(1, 1000)] public int GraphMaxNodes { get; init; } = 100;
+    [Range(1, 500)] public int GraphMaxPaths { get; init; } = 50;
+    [Range(0, 1)] public double SemanticDeduplicationThreshold { get; init; } = .92;
+    [Range(1, 15)] public int MaxResults { get; init; } = 15;
+    [Range(512, 8000)] public int MaxContextTokens { get; init; } = 8000;
+    [Range(100, 800)] public int RetrievalTimeoutMs { get; init; } = 800;
+    [Range(50, 600)] public int SourceTimeoutMs { get; init; } = 450;
+    [Range(25, 400)] public int GraphTimeoutMs { get; init; } = 200;
+    [Range(25, 250)] public int ProcessingTimeoutMs { get; init; } = 100;
+    [Range(1, 60)] public int SearchCacheTtlMinutes { get; init; } = 5;
+    [Range(1, 30)] public int ResponseCacheTtlMinutes { get; init; } = 2;
+    [Required] public string SchemaVersion { get; init; } = "2";
+    [Required] public string RankingPolicyVersion { get; init; } = "phase-2-v1";
+    [Required] public string CacheKeySecret { get; init; } = "development-only-change-me";
+    public string[] AllowedGraphRelations { get; init; } = ["HAS_WORKFLOW", "REQUIRES_PERMISSION", "HAS_RULE", "EMITS_EVENT", "USES_ENTITY", "HAS_EXCEPTION"];
+    public RetrievalWeightOptions HowTo { get; init; } = new(.45, .35, .20);
+    public RetrievalWeightOptions Explanation { get; init; } = new(.20, .50, .30);
+    public RetrievalWeightOptions PermissionCheck { get; init; } = new(.60, .05, .35);
+    public RetrievalWeightOptions ImpactAnalysis { get; init; } = new(.25, .20, .55);
+    public RetrievalWeightOptions Default { get; init; } = new(.35, .45, .20);
+}
+
+public sealed record RetrievalWeightOptions(double Sql, double Vector, double Graph);
+
+public sealed class RetrievalCacheOptions
+{
+    public const string SectionName = "RetrievalCache";
+    public string? RedisConfiguration { get; init; }
+    public string InstanceName { get; init; } = "ai-gateway:";
+}
+
 public sealed class KnowledgeBaseMcpOptions
 {
     public const string SectionName = "Mcp:KnowledgeBase";
