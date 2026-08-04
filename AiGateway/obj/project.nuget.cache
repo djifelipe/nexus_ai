@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "tYcAhsh/sl0=",
+  "success": true,
+  "projectFilePath": "C:\\github.com\\djifelipe\\nexus_ai\\AiGateway\\AiGateway.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\djife\\.nuget\\packages\\microsoft.aspnetcore.openapi\\9.0.18\\microsoft.aspnetcore.openapi.9.0.18.nupkg.sha512",
+    "C:\\Users\\djife\\.nuget\\packages\\microsoft.openapi\\1.6.17\\microsoft.openapi.1.6.17.nupkg.sha512"
+  ],
+  "logs": []
+}
