@@ -54,6 +54,10 @@
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[9.0.18, )"
+            },
+            "ModelContextProtocol": {
+              "target": "Package",
+              "version": "[1.4.1, )"
             }
           },
           "imports": [

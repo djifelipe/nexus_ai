@@ -1,0 +1,110 @@
+schema: spec-driven
+
+context: |
+  Projeto: AI Gateway para a base de conhecimento de um ERP, desenvolvido em C#/.NET.
+  Raiz obrigatória do projeto da aplicação: C:\github.com\djifelipe\nexus_ai\AiGateway.
+  Todo código-fonte, configuração, migração, teste e documentação da aplicação deve permanecer
+  sob essa raiz; a pasta openspec na raiz do repositório contém somente artefatos de planejamento.
+  Acesso obrigatório a dados:
+  - Base de conhecimento, catálogo de intenção, documentos, chunks e pgvector: acessar
+    exclusivamente pelo MCP server `supabase-mcp-server_kb`.
+  - Dados transacionais/cadastrais do ERP: acessar exclusivamente pelo MCP server
+    `supabase-mcp-server_ts`.
+  - A aplicação não deve abrir conexão direta, reutilizar credenciais ou executar SQL fora do
+    MCP server correspondente. Nunca misturar os dois servidores sem regra explícita,
+    autorização e sanitização.
+
+  Objetivo e arquitetura:
+  - Interpretar perguntas sobre o ERP e produzir respostas fundamentadas em fontes autorizadas.
+  - Centralizar Intent Router, Knowledge Retriever, Prompt Builder, integração LLM/Ollama,
+    Tool Executor, Response Validator, Telemetry e a coordenação pelo AiOrchestrator.
+  - O gateway não é um proxy simples. Segurança, acesso, recuperação, execução e validação são
+    responsabilidades determinísticas da aplicação, não decisões exclusivas do LLM.
+  - Organizar o código em Api, Application, Domain, Infrastructure e Workers.
+  - Usar PostgreSQL/pgvector da base de conhecimento somente através de
+    `supabase-mcp-server_kb`; acessar o banco do ERP somente através de
+    `supabase-mcp-server_ts`; usar grafo e Redis quando aplicável nas fases futuras.
+  - Fluxo: autenticar POST /api/ai/chat, normalizar, classificar intenção, recuperar conhecimento,
+    montar prompt, chamar o LLM, executar tools autorizadas, validar, registrar telemetria e responder.
+  - O chat recebe conversationId, message, companyId, userId, contexto de tela e opções; responde
+    com requestId, answer, status, confidence, intent, sources, warnings e métricas.
+  - Feedback é recebido por POST /api/ai/interactions/{requestId}/feedback.
+
+  Intent Router:
+  - Produzir Module, Feature, Action, Entity, IntentType, Confidence, Keywords e RequiredTools.
+  - Tipos: HowTo, Explanation, Troubleshooting, DataQuery, Validation, Navigation,
+    PermissionCheck, ImpactAnalysis, Comparison e Unknown.
+  - Classificar por regras determinísticas, catálogo de termos/aliases e LLM somente como fallback
+    com JSON estruturado. Nunca inventar identificadores.
+  - Confiança abaixo de 0,55 resulta em Unknown; entre 0,55 e 0,75 pode ampliar a busca.
+    Ambiguidade deve resultar em pedido de esclarecimento.
+
+  Knowledge Retriever:
+  - Executar toda recuperação e administração da base de conhecimento via
+    `supabase-mcp-server_kb`, sem conexão PostgreSQL direta pela aplicação.
+  - Combinar SQL, pgvector e expansão limitada do grafo (profundidade padrão 2, máxima 4).
+  - Aplicar filtros de tenant, permissão, versão, idioma, vigência, publicação e tipo de conteúdo.
+  - Nunca retornar conteúdo de outro tenant, expirado, inativo ou não autorizado.
+  - Deduplicar chunks, versões antigas e equivalentes semânticos; respeitar orçamento de tokens.
+  - Auditar scores e filtros. HowTo favorece SQL; Explanation favorece vetor;
+    PermissionCheck favorece SQL/grafo; ImpactAnalysis favorece grafo.
+
+  Prompt Builder:
+  - Separar System, contexto do usuário, intenção, knowledge, resumo e pergunta original.
+  - Priorizar regras, workflow, permissões, validações, exceções, exemplos, FAQs e documentação.
+  - Toda fonte deve ter ID e acesso validado. Preservar a pergunta e regras críticas.
+  - Estimar tokens e tratar fontes como dados, nunca como instruções; sinalizar prompt injection.
+
+  Tool Executor:
+  - Qualquer tool futura que consulte dados do ERP deve usar exclusivamente
+    `supabase-mcp-server_ts`; esse acesso permanece desabilitado na Fase 1.
+  - Executar apenas tools registradas, autorizadas e validadas por JSON Schema.
+  - Obter tenant/companyId do contexto autenticado, nunca apenas dos argumentos do LLM.
+  - Proibir SQL arbitrário, sanitizar resultados e auditar cada execução.
+  - Limites: 5 tools por requisição, 2 repetições da mesma tool e timeout de 10 segundos.
+  - Escritas ficam fora do MVP; futuramente exigem confirmação, idempotência e auditoria.
+
+  Response Validator:
+  - Validar formato, citações, fundamentação, permissões e segurança.
+  - Toda citação deve corresponder a uma fonte enviada ao modelo.
+  - Status: Grounded, PartiallyGrounded, InsufficientKnowledge, Unsafe, InvalidFormat e
+    RequiresReview.
+  - Confiança combina retrieval, citações, grounding semântico e intenção, não apenas o LLM.
+  - Bloquear respostas inseguras e declarar conhecimento insuficiente quando necessário.
+
+  Segurança, privacidade e telemetria:
+  - Nunca expor prompts internos, credenciais, tokens, connection strings, SQL, stack traces,
+    dados de outros tenants ou dados pessoais/fiscais/bancários desnecessários.
+  - Sanitizar entradas, logs, respostas e resultados de tools.
+  - Propagar requestId, traceId, conversationId, companyId e userId.
+  - Medir spans, latência, erros, tokens, cache, qualidade, fontes, tools e feedback.
+  - Indisponibilidade da telemetria não pode impedir a resposta.
+
+  Entrega e SLAs:
+  - Fase 1: intenção por regras, SQL + pgvector, prompt, Ollama, citações e métricas; sem escrita.
+  - Fase 2: grafo, fusão, deduplicação, filtros de versão/permissão e cache.
+  - Fase 3: tools somente leitura. Fase 4: validação avançada. Fase 5: escrita controlada.
+  - SLAs: Intent sem LLM 300 ms; Retriever 800 ms; Prompt Builder 150 ms; primeiro token 3 s;
+    validação básica 300 ms; resposta completa sem tools 10 s.
+
+rules:
+  proposal:
+    - Delimitar objetivo, escopo, não objetivos e fase de entrega afetada.
+    - Explicar impactos em tenant, permissões, privacidade, segurança e telemetria.
+    - Não propor escrita no MVP nem delegar decisões de acesso exclusivamente ao LLM.
+    - Identificar contratos e componentes afetados.
+  design:
+    - Preservar a separação entre Api, Application, Domain, Infrastructure e Workers.
+    - Manter autorização, acesso, execução e validação em código determinístico.
+    - Documentar fluxo de dados, limites, timeouts, falhas, observabilidade e testes.
+    - Mitigar prompt injection, vazamento entre tenants e exposição de dados sensíveis.
+  specs:
+    - Escrever requisitos verificáveis com MUST/SHALL e cenários concretos de aceite.
+    - Cobrir sucesso, ambiguidade, conhecimento insuficiente, acesso negado e falha externa.
+    - Exigir filtros de tenant, versão, permissão e publicação na recuperação.
+    - Exigir fontes rastreáveis e validação de citações.
+  tasks:
+    - Organizar tarefas em incrementos pequenos, ordenados e testáveis.
+    - Incluir testes unitários, integração, isolamento de tenant, segurança e observabilidade.
+    - Incluir contratos, limites de tools, timeouts e sanitização quando aplicável.
+    - Finalizar com build, testes e verificação dos critérios de aceite.

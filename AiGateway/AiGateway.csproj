@@ -8,6 +8,15 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.18" />
+    <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+    <Content Remove="Tests\**\*" />
+    <EmbeddedResource Remove="Tests\**\*" />
+    <None Remove="Tests\**\*" />
+    <Content Include="Infrastructure\PostgreSql\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

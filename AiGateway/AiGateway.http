@@ -1,6 +1,21 @@
-@AiGateway_HostAddress = http://localhost:5075
+@AiGateway_HostAddress = http://localhost:5085
 
-GET {{AiGateway_HostAddress}}/weatherforecast/
-Accept: application/json
+POST {{AiGateway_HostAddress}}/api/ai/chat
+Content-Type: application/json
+X-Company-Id: company-001
+X-User-Id: user-123
+X-Erp-Version: 5.8.2
+X-Language: pt-BR
+X-Permissions: Fiscal.NFe.Visualizar,Fiscal.NFe.Cancelar
+
+{
+  "conversationId": "conversation-1",
+  "message": "Como cancelar uma NF-e?",
+  "companyId": "company-001",
+  "userId": "user-123",
+  "context": { "currentModule": "Fiscal", "currentScreen": "NFeList", "selectedEntityId": null },
+  "options": { "stream": false, "includeSources": true }
+}
 
 ###
+GET {{AiGateway_HostAddress}}/health/ready
