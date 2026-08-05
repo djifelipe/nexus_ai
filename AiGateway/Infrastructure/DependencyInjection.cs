@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddOptions<OllamaOptions>().Bind(configuration.GetSection(OllamaOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<ReadOnlyToolsOptions>().Bind(configuration.GetSection(ReadOnlyToolsOptions.SectionName)).ValidateDataAnnotations()
             .Validate(options => options.Enabled.All(AiGateway.Domain.Tools.ReadOnlyToolNames.All.Contains), "A lista contém uma ferramenta não registrada.").ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AdvancedValidationOptions>, AdvancedValidationOptionsValidator>();
+        services.AddOptions<AdvancedValidationOptions>().Bind(configuration.GetSection(AdvancedValidationOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<ErpMcpOptions>().Bind(configuration.GetSection(ErpMcpOptions.SectionName)).ValidateDataAnnotations()
             .Validate(options => options.ServerName == "supabase-mcp-server_ts", "Somente supabase-mcp-server_ts é permitido para dados do ERP.").ValidateOnStart();
         services.AddOptions<WorkflowToolMcpOptions>().Bind(configuration.GetSection(WorkflowToolMcpOptions.SectionName)).ValidateDataAnnotations()
@@ -74,11 +76,18 @@ public static class DependencyInjection
         services.AddTransient<IEmbeddingClient>(sp => sp.GetRequiredService<OllamaClient>());
         services.AddSingleton<ITokenEstimator, ApproximateTokenEstimator>();
         services.AddSingleton<ISensitiveDataSanitizer, SensitiveDataSanitizer>();
+        services.AddSingleton<ISensitiveDataDetector, SensitiveDataDetector>();
         services.AddSingleton<IAiTelemetry, AiTelemetry>();
         services.AddScoped<IIntentRouter, RuleBasedIntentRouter>();
         services.AddScoped<IKnowledgeRetriever, HybridKnowledgeRetriever>();
         services.AddScoped<IPromptBuilder, GroundedPromptBuilder>();
-        services.AddScoped<IResponseValidator, CitationResponseValidator>();
+        services.AddScoped<CitationResponseValidator>();
+        services.AddScoped<DeterministicClaimExtractor>();
+        services.AddScoped<IModelClaimExtractor, ModelClaimExtractor>();
+        services.AddScoped<IClaimExtractor, HybridClaimExtractor>();
+        services.AddScoped<AiGateway.Domain.Policies.AdvancedValidationPolicy>(sp => { var value = sp.GetRequiredService<IOptions<AdvancedValidationOptions>>().Value; return new(value.RetrievalWeight, value.CitationWeight, value.SemanticWeight, value.IntentWeight, value.GroundedThreshold, value.PartiallyGroundedThreshold, value.SemanticSupportThreshold, value.SemanticContradictionThreshold, value.MaxResponseCharacters, value.MaxClaims, value.MaxEvidenceCandidatesPerClaim, value.ExternalTimeoutMs, value.PolicyVersion); });
+        services.AddScoped<ISemanticGroundingEvaluator, LexicalSemanticGroundingEvaluator>();
+        services.AddScoped<IResponseValidator, AdvancedResponseValidator>();
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         services.AddHealthChecks().AddCheck<KnowledgeBaseMcpHealthCheck>("mcp-kb").AddCheck<OllamaHealthCheck>("ollama");
         return services;

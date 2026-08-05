@@ -90,6 +90,28 @@ public sealed class ReadOnlyToolsOptions
     public string[] CustomerSummaryAllowedFields { get; init; } = ["displayName", "status", "city", "state"];
 }
 
+public sealed class AdvancedValidationOptions
+{
+    public const string SectionName = "AdvancedValidation";
+    public bool Enabled { get; init; }
+    public bool ShadowModeEnabled { get; init; }
+    public bool RegenerationEnabled { get; init; }
+    public bool ModelClaimExtractionEnabled { get; init; }
+    [Range(100, 100_000)] public int MaxResponseCharacters { get; init; } = 20_000;
+    [Range(1, 100)] public int MaxClaims { get; init; } = 30;
+    [Range(1, 20)] public int MaxEvidenceCandidatesPerClaim { get; init; } = 5;
+    [Range(50, 10_000)] public int ExternalTimeoutMs { get; init; } = 1_500;
+    [Range(0, 1)] public double RetrievalWeight { get; init; } = .35;
+    [Range(0, 1)] public double CitationWeight { get; init; } = .25;
+    [Range(0, 1)] public double SemanticWeight { get; init; } = .25;
+    [Range(0, 1)] public double IntentWeight { get; init; } = .15;
+    [Range(0, 1)] public double GroundedThreshold { get; init; } = .80;
+    [Range(0, 1)] public double PartiallyGroundedThreshold { get; init; } = .55;
+    [Range(0, 1)] public double SemanticSupportThreshold { get; init; } = .55;
+    [Range(0, 1)] public double SemanticContradictionThreshold { get; init; } = .25;
+    [Required] public string PolicyVersion { get; init; } = "phase-4-v1";
+}
+
 public sealed class ErpMcpOptions
 {
     public const string SectionName = "Mcp:Erp";

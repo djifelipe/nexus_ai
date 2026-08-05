@@ -1,9 +1,4 @@
-# Citation Validation Specification
-
-## Purpose
-Ensure generated factual answers remain grounded in the exact authorized knowledge supplied to the model.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Citation membership validation
 The validator MUST extract citations in `[source-id]` format, accept as valid only IDs from the exact authorized knowledge set sent to Ollama, and associate valid citations with the claims they are capable of supporting.
@@ -35,9 +30,3 @@ The validator SHALL return `InsufficientKnowledge` with a safe standard answer w
 - **WHEN** citations are valid members of the prompt package but do not support one or more material claims
 - **THEN** the validator removes unsupported content through controlled regeneration or returns the safe insufficient-knowledge result
 
-### Requirement: Basic-validation latency
-Deterministic citation validation SHALL complete within 300 ms under the defined acceptance-test workload.
-
-#### Scenario: Maximum response validation
-- **WHEN** a response at the configured maximum size is checked against the maximum source set
-- **THEN** validation meets the 300 ms target

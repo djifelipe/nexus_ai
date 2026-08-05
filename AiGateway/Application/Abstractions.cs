@@ -1,6 +1,7 @@
 using AiGateway.Domain;
 using AiGateway.Domain.Tools;
 using System.Text.Json;
+using AiGateway.Domain.Responses;
 
 namespace AiGateway.Application;
 
@@ -26,6 +27,10 @@ public interface IKnowledgeRepository
 public interface IEmbeddingClient { int Dimensions { get; } Task<ReadOnlyMemory<float>> CreateAsync(string input, CancellationToken cancellationToken); }
 public interface ITokenEstimator { int Estimate(string text); }
 public interface ISensitiveDataSanitizer { string Sanitize(string input); }
+public interface ISensitiveDataDetector { IReadOnlyList<SensitiveDataFinding> Detect(string input, UserContext? userContext = null); }
+public interface IClaimExtractor { Task<ClaimExtractionResult> ExtractAsync(string answer, CancellationToken cancellationToken); }
+public interface IModelClaimExtractor { Task<ClaimExtractionResult> ExtractStructuredAsync(string answer, CancellationToken cancellationToken); }
+public interface ISemanticGroundingEvaluator { Task<SemanticGroundingResult> EvaluateAsync(IReadOnlyList<VerifiableClaim> claims, IReadOnlyList<KnowledgeItem> authorizedSources, CancellationToken cancellationToken); }
 public interface IToolCatalog
 {
     IReadOnlyList<ToolDefinition> Enabled { get; }
@@ -55,6 +60,7 @@ public interface IAiTelemetry
     void RecordRetrievalEvent(string operation, string outcome, double durationMs, int count = 0);
     IDisposable StartTool(ToolExecutionRequest request, ToolDefinition? definition);
     void RecordTool(ToolExecutionRequest request, ToolExecutionResult result, ToolRiskLevel riskLevel);
+    void RecordValidation(AdvancedValidationTelemetry validation) { }
 }
 
 public interface IRetrievalAccessScopeFactory

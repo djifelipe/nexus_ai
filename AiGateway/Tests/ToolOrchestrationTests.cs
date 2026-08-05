@@ -7,6 +7,8 @@ using AiGateway.Domain;
 using AiGateway.Domain.Tools;
 using AiGateway.Infrastructure.Security;
 using Microsoft.Extensions.Options;
+using AiGateway.Domain.Policies;
+using AiGateway.Domain.Responses;
 
 namespace AiGateway.Tests;
 
@@ -54,6 +56,21 @@ public sealed class ToolOrchestrationTests
         Assert.Equal(ErrorCodes.ToolLimitExceeded, error.Code); Assert.Equal(5, executor.Calls.Count);
     }
 
+    [Fact]
+    public async Task Orchestrator_regenerates_once_and_revalidates_without_expanding_sources()
+    {
+        var model = new QueueModel([
+            new ModelResponse("Resposta parcial [kb1]", 1, 1, "stop", false, 1),
+            new ModelResponse("Resposta corrigida [kb1]", 1, 1, "stop", false, 1)
+        ]);
+        var validator = new SequenceValidator();
+        var orchestrator = OrchestratorWithAdvancedValidation(model, new FakeExecutor(), validator);
+        var response = await orchestrator.ExecuteAsync(Request(), default);
+        Assert.Equal(ValidationStatus.Grounded, response.Status); Assert.Equal(2, model.Calls); Assert.Equal(2, validator.Calls);
+        Assert.Equal(model.Prompts[0].Sources.Select(x => x.Id), model.Prompts[1].Sources.Select(x => x.Id));
+        Assert.Contains("VALIDATION FEEDBACK - SANITIZED", model.Prompts[1].Messages.Last().Content);
+    }
+
     private static object Arguments(string name) => name switch
     {
         ReadOnlyToolNames.InventoryGetBalance => new { productId = "p" },
@@ -75,6 +92,11 @@ public sealed class ToolOrchestrationTests
         var catalog = new ReadOnlyToolCatalog(Options.Create(new ReadOnlyToolsOptions { Enabled = ReadOnlyToolNames.All.ToArray() }));
         return new(new Router(), new Retriever(), new PromptBuilder(), model, new CitationResponseValidator(), new Telemetry(), Options.Create(new AiGatewayOptions { TotalTimeoutSeconds = 30 }), Options.Create(new AdvancedRetrievalOptions()), null!, null!, null!, new SensitiveDataSanitizer(), catalog, executor, Options.Create(new ReadOnlyToolsOptions()));
     }
+    private static AiOrchestrator OrchestratorWithAdvancedValidation(ILanguageModelClient model, IToolExecutor executor, IResponseValidator validator)
+    {
+        var catalog = new ReadOnlyToolCatalog(Options.Create(new ReadOnlyToolsOptions { Enabled = ReadOnlyToolNames.All.ToArray() }));
+        return new(new Router(), new Retriever(), new PromptBuilder(), model, validator, new Telemetry(), Options.Create(new AiGatewayOptions { TotalTimeoutSeconds = 30 }), Options.Create(new AdvancedRetrievalOptions()), null!, null!, null!, new SensitiveDataSanitizer(), catalog, executor, Options.Create(new ReadOnlyToolsOptions()), Options.Create(new AdvancedValidationOptions { Enabled = true, RegenerationEnabled = true }), new AdvancedValidationPolicy());
+    }
     private sealed class Router : IIntentRouter { public Task<IntentResult> RouteAsync(IntentRouterRequest request, CancellationToken ct) => Task.FromResult(new IntentResult("Estoque", "Produto", "Saldo", "Produto", IntentType.DataQuery, .9, ["saldo"], [ReadOnlyToolNames.InventoryGetBalance], false, null, "test", ["Estoque"])); }
     private sealed class Retriever : IKnowledgeRetriever { public Task<RetrievalResult> RetrieveAsync(RetrievalRequest request, CancellationToken ct) => Task.FromResult(new RetrievalResult([new("kb1", "documentation", "Saldo", "Use o saldo atual retornado pela ferramenta.", "Estoque", "Produto", "1", 0, 1, 1, true, new Dictionary<string, string>())], new([], [], 1, false, false))); }
     private sealed class PromptBuilder : IPromptBuilder { public Task<PromptPackage> BuildAsync(PromptBuildRequest request, CancellationToken ct) => Task.FromResult(new PromptPackage([new("system", "cite fontes"), new("user", request.Question)], request.Retrieval.Items, 10, request.Question)); }
@@ -88,6 +110,16 @@ public sealed class ToolOrchestrationTests
     {
         public List<ToolExecutionRequest> Calls { get; } = [];
         public Task<ToolExecutionResult> ExecuteAsync(ToolExecutionRequest request, CancellationToken ct) { Calls.Add(request); if (!ReadOnlyToolNames.All.Contains(request.Call.Name)) return Task.FromResult(ToolExecutionResult.Failed(request.Call, ToolErrorCodes.NotRegistered, "denied")); var data = JsonSerializer.SerializeToElement(new { productId = "p1", availableBalance = 10, unit = "UN" }); return Task.FromResult(new ToolExecutionResult(request.Call.Id, request.Call.Name, true, data, null, null, 1)); }
+    }
+    private sealed class SequenceValidator : IResponseValidator
+    {
+        public int Calls { get; private set; }
+        public Task<ResponseValidationResult> ValidateAsync(ResponseValidationRequest request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Calls == 1) return Task.FromResult(new ResponseValidationResult(ValidationStatus.PartiallyGrounded, request.ModelResponse.Content, ["kb1"], [ErrorCodes.UnsupportedClaim]) { SanitizedReasons = [new(ErrorCodes.UnsupportedClaim, "grounding", true)], RegenerationRecommended = true });
+            return Task.FromResult(new ResponseValidationResult(ValidationStatus.Grounded, request.ModelResponse.Content, ["kb1"], []) { Confidence = .9, ScoreComponents = new(1, 1, 1, 1) });
+        }
     }
     private sealed class Telemetry : IAiTelemetry
     {

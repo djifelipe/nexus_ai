@@ -69,7 +69,16 @@ public sealed record ModelResponse(string Content, int? PromptTokens, int? Compl
 {
     public IReadOnlyList<Tools.ToolCall> ToolCalls { get; init; } = [];
 }
-public sealed record ResponseValidationResult(ValidationStatus Status, string Answer, IReadOnlyList<string> CitedSourceIds, IReadOnlyList<string> Reasons);
+public sealed record ResponseValidationResult(ValidationStatus Status, string Answer, IReadOnlyList<string> CitedSourceIds, IReadOnlyList<string> Reasons)
+{
+    public double Confidence { get; init; }
+    public IReadOnlyList<Responses.ClaimValidationResult> Claims { get; init; } = [];
+    public Responses.GroundingScoreComponents? ScoreComponents { get; init; }
+    public IReadOnlyList<Responses.SanitizedValidationReason> SanitizedReasons { get; init; } = [];
+    public Responses.SemanticCheckOutcome SemanticOutcome { get; init; } = Responses.SemanticCheckOutcome.NotRequired;
+    public bool ContainsSensitiveData { get; init; }
+    public bool RegenerationRecommended { get; init; }
+}
 public sealed record AiSource(string SourceId, string SourceType, string Title, string? Version);
 public sealed record AiMetrics(long TotalLatencyMs, long IntentLatencyMs, long RetrievalLatencyMs, long PromptLatencyMs, long ModelLatencyMs, long ValidationLatencyMs, int? PromptTokens, int? CompletionTokens, int ContextTokens);
 public sealed record AiResponse(string RequestId, string? ConversationId, string Answer, ValidationStatus Status, double Confidence, IntentResult Intent, IReadOnlyList<AiSource> Sources, IReadOnlyList<string> Warnings, AiMetrics Metrics);
@@ -82,7 +91,7 @@ public sealed record RetrievalRequest(string Question, IntentResult Intent, User
     { "workflow", "business-rule", "faq", "example", "documentation", "permission", "validation", "exception" };
 }
 public sealed record PromptBuildRequest(string Question, IntentResult Intent, RetrievalResult Retrieval, UserContext UserContext, string? ConversationSummary = null);
-public sealed record ResponseValidationRequest(ModelResponse ModelResponse, PromptPackage Prompt);
+public sealed record ResponseValidationRequest(ModelResponse ModelResponse, PromptPackage Prompt, IntentResult? Intent = null, UserContext? UserContext = null, RetrievalResult? Retrieval = null, string RequestId = "unknown", string? ConversationId = null, int Attempt = 0);
 
 public static class ErrorCodes
 {
@@ -101,6 +110,11 @@ public static class ErrorCodes
     public const string RetrievalAccessContextInvalid = "AI_RETRIEVAL_ACCESS_CONTEXT_INVALID";
     public const string RetrievalFilterIntegrity = "AI_RETRIEVAL_FILTER_INTEGRITY";
     public const string GraphUnavailable = "AI_GRAPH_UNAVAILABLE";
+    public const string ValidationDependencyUnavailable = "AI_VALIDATION_DEPENDENCY_UNAVAILABLE";
+    public const string ValidationLimitExceeded = "AI_VALIDATION_LIMIT_EXCEEDED";
+    public const string SensitiveDataDetected = "AI_SENSITIVE_DATA_DETECTED";
+    public const string PermissionViolation = "AI_PERMISSION_VIOLATION";
+    public const string UnsupportedClaim = "AI_UNSUPPORTED_CLAIM";
 }
 
 public sealed class AiGatewayException(string code, string safeMessage, Exception? innerException = null) : Exception(safeMessage, innerException)

@@ -3,11 +3,14 @@ using AiGateway.Domain;
 using AiGateway.Domain.Tools;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using AiGateway.Domain.Policies;
 
 namespace AiGateway.Application.Orchestration;
 
-public sealed class AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever retrieval, IPromptBuilder prompts, ILanguageModelClient model, IResponseValidator validator, IAiTelemetry telemetry, IOptions<AiGatewayOptions> options, IOptions<AdvancedRetrievalOptions> advanced, IResponseCache responseCache, ICacheKeyFactory cacheKeys, AiGateway.Domain.Policies.ICacheAdmissionPolicy cacheAdmission, ISensitiveDataSanitizer sanitizer, IToolCatalog toolCatalog, IToolExecutor toolExecutor, IOptions<ReadOnlyToolsOptions> toolOptions) : IAiOrchestrator
+public sealed class AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever retrieval, IPromptBuilder prompts, ILanguageModelClient model, IResponseValidator validator, IAiTelemetry telemetry, IOptions<AiGatewayOptions> options, IOptions<AdvancedRetrievalOptions> advanced, IResponseCache responseCache, ICacheKeyFactory cacheKeys, ICacheAdmissionPolicy cacheAdmission, ISensitiveDataSanitizer sanitizer, IToolCatalog toolCatalog, IToolExecutor toolExecutor, IOptions<ReadOnlyToolsOptions> toolOptions, IOptions<AdvancedValidationOptions> validationOptions, AdvancedValidationPolicy validationPolicy) : IAiOrchestrator
 {
+    public AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever retrieval, IPromptBuilder prompts, ILanguageModelClient model, IResponseValidator validator, IAiTelemetry telemetry, IOptions<AiGatewayOptions> options, IOptions<AdvancedRetrievalOptions> advanced, IResponseCache responseCache, ICacheKeyFactory cacheKeys, ICacheAdmissionPolicy cacheAdmission, ISensitiveDataSanitizer sanitizer, IToolCatalog toolCatalog, IToolExecutor toolExecutor, IOptions<ReadOnlyToolsOptions> toolOptions)
+        : this(intents, retrieval, prompts, model, validator, telemetry, options, advanced, responseCache, cacheKeys, cacheAdmission, sanitizer, toolCatalog, toolExecutor, toolOptions, Options.Create(new AdvancedValidationOptions()), new AdvancedValidationPolicy()) { }
     public async Task<AiResponse> ExecuteAsync(AiRequest request, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeout.CancelAfter(TimeSpan.FromSeconds(options.Value.TotalTimeoutSeconds)); using var operation = telemetry.StartRequest(request); var total = Stopwatch.StartNew();
@@ -50,7 +53,15 @@ public sealed class AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever re
                 prompt = AppendToolResults(prompt, generated, results);
                 var (next, nextMs) = await Timed("llm.chat", () => model.ChatAsync(prompt, timeout.Token)); generated = next; modelMs += nextMs;
             }
-            var (validation, validationMs) = await Timed("response.validate", () => validator.ValidateAsync(new(generated, prompt), timeout.Token));
+            var (validation, validationMs) = await Timed("response.validate", () => validator.ValidateAsync(new(generated, prompt, intent, request.UserContext, knowledge, request.RequestId, request.ConversationId), timeout.Token));
+            if (validationOptions.Value.Enabled && validationOptions.Value.RegenerationEnabled && validationPolicy.CanRegenerate(validation.Status, validation.SanitizedReasons))
+            {
+                var regenerationPrompt = AppendValidationFeedback(prompt, validation);
+                var (regenerated, regenerationModelMs) = await Timed("llm.chat", () => model.ChatAsync(regenerationPrompt, timeout.Token));
+                modelMs += regenerationModelMs;
+                var (revalidated, revalidationMs) = await Timed("response.validate", () => validator.ValidateAsync(new(regenerated, regenerationPrompt, intent, request.UserContext, knowledge, request.RequestId, request.ConversationId, 1), timeout.Token));
+                validationMs += revalidationMs; generated = regenerated; prompt = regenerationPrompt; validation = revalidated;
+            }
             var cited = prompt.Sources.Where(s => validation.CitedSourceIds.Contains(s.Id, StringComparer.OrdinalIgnoreCase)).Select(s => new AiSource(s.Id, s.Type, s.Title, s.Version)).ToArray();
             var response = new AiResponse(request.RequestId, request.ConversationId, validation.Answer, validation.Status, Confidence(intent, knowledge, validation), intent, request.IncludeSources ? cited : [], validation.Reasons, Metrics(total, intentMs, retrievalMs, promptMs, modelMs, validationMs, generated.PromptTokens, generated.CompletionTokens, prompt.EstimatedTokens));
             if (!usedTools && responseKey is not null && fingerprint is not null && cacheAdmission.CanCacheResponse(new(validation.Status, sanitizer.Sanitize(validation.Answer) != validation.Answer, generated.HasToolCalls, false, validation.CitedSourceIds, knowledge.Items.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase))))
@@ -65,7 +76,7 @@ public sealed class AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever re
     }
     private async Task<(T, long)> Timed<T>(string stage, Func<Task<T>> action) { using var scope = telemetry.StartStage(stage); var watch = Stopwatch.StartNew(); var result = await action(); return (result, watch.ElapsedMilliseconds); }
     private AiResponse Complete(AiResponse response) { telemetry.RecordCompleted(response); return response; }
-    private static double Confidence(IntentResult intent, RetrievalResult retrieval, ResponseValidationResult validation) => Math.Clamp(intent.Confidence * .3 + (retrieval.Items.Count > 0 ? .35 : 0) + (validation.Status == ValidationStatus.Grounded ? .35 : 0), 0, 1);
+    private static double Confidence(IntentResult intent, RetrievalResult retrieval, ResponseValidationResult validation) => validation.ScoreComponents is not null ? validation.Confidence : Math.Clamp(intent.Confidence * .3 + (retrieval.Items.Count > 0 ? .35 : 0) + (validation.Status == ValidationStatus.Grounded ? .35 : 0), 0, 1);
     private static AiMetrics Metrics(Stopwatch total, long intent, long retrieval, long prompt, long model, long validation, int? pt, int? ct, int context) => new(total.ElapsedMilliseconds, intent, retrieval, prompt, model, validation, pt, ct, context);
     private static PromptPackage AppendToolResults(PromptPackage prompt, ModelResponse generated, IReadOnlyList<ToolExecutionResult> results)
     {
@@ -81,5 +92,14 @@ public sealed class AiOrchestrator(IIntentRouter intents, IKnowledgeRetriever re
                 sources.Add(new(sourceId, "tool-result", result.ToolName, result.Data.Value.GetRawText(), null, null, null, 0, 0, 1, true, new Dictionary<string, string> { ["tool"] = result.ToolName }));
         }
         return prompt with { Messages = messages, Sources = sources };
+    }
+    private static PromptPackage AppendValidationFeedback(PromptPackage prompt, ResponseValidationResult validation)
+    {
+        var messages = prompt.Messages.ToList();
+        var codes = validation.SanitizedReasons.Where(x => x.Correctable).Select(x => x.Code).Distinct(StringComparer.Ordinal).Take(10).ToArray();
+        var claims = validation.Claims.Where(x => x.Status is not AiGateway.Domain.Responses.ClaimGroundingStatus.Supported).Select(x => x.Claim.Id).Take(20).ToArray();
+        var feedback = JsonSerializer.Serialize(new { instruction = "Corrija somente as falhas indicadas, use exclusivamente as mesmas fontes autorizadas e cite cada afirmação factual.", reasonCodes = codes, claimIds = claims });
+        messages.Add(new("system", $"[VALIDATION FEEDBACK - SANITIZED]\n{feedback}"));
+        return prompt with { Messages = messages };
     }
 }
