@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AiGateway")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c5ca4730534e354f6d8234ee6bd0ff36df230ac1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+29056dc517d073c76118974614a788cbfef804be")]
 [assembly: System.Reflection.AssemblyProductAttribute("AiGateway")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AiGateway")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

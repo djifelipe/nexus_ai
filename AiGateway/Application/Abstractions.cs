@@ -1,4 +1,6 @@
 using AiGateway.Domain;
+using AiGateway.Domain.Tools;
+using System.Text.Json;
 
 namespace AiGateway.Application;
 
@@ -24,6 +26,25 @@ public interface IKnowledgeRepository
 public interface IEmbeddingClient { int Dimensions { get; } Task<ReadOnlyMemory<float>> CreateAsync(string input, CancellationToken cancellationToken); }
 public interface ITokenEstimator { int Estimate(string text); }
 public interface ISensitiveDataSanitizer { string Sanitize(string input); }
+public interface IToolCatalog
+{
+    IReadOnlyList<ToolDefinition> Enabled { get; }
+    bool TryGet(string name, out ToolDefinition definition);
+}
+public interface IToolExecutor { Task<ToolExecutionResult> ExecuteAsync(ToolExecutionRequest request, CancellationToken cancellationToken); }
+public interface IToolHandler
+{
+    string Name { get; }
+    Task<JsonElement> ExecuteAsync(UserContext userContext, JsonElement arguments, CancellationToken cancellationToken);
+}
+public interface IErpReadPort
+{
+    Task<InventoryBalanceResult?> GetInventoryBalanceAsync(InventoryBalanceQuery query, CancellationToken cancellationToken);
+    Task<InvoiceStatusResult?> GetInvoiceStatusAsync(InvoiceStatusQuery query, CancellationToken cancellationToken);
+    Task<PermissionResult> CheckPermissionAsync(PermissionQuery query, CancellationToken cancellationToken);
+    Task<CustomerSummaryResult?> GetCustomerSummaryAsync(CustomerSummaryQuery query, CancellationToken cancellationToken);
+}
+public interface IWorkflowReadPort { Task<WorkflowResult?> GetWorkflowAsync(WorkflowQuery query, CancellationToken cancellationToken); }
 public interface IAiTelemetry
 {
     IDisposable StartRequest(AiRequest request);
@@ -32,6 +53,8 @@ public interface IAiTelemetry
     void RecordError(string code);
     IDisposable StartRetrievalStage(string stage, IReadOnlyDictionary<string, object?>? tags = null);
     void RecordRetrievalEvent(string operation, string outcome, double durationMs, int count = 0);
+    IDisposable StartTool(ToolExecutionRequest request, ToolDefinition? definition);
+    void RecordTool(ToolExecutionRequest request, ToolExecutionResult result, ToolRiskLevel riskLevel);
 }
 
 public interface IRetrievalAccessScopeFactory

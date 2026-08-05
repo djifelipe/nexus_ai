@@ -61,8 +61,14 @@ public sealed record RetrievalResult(IReadOnlyList<KnowledgeItem> Items, Retriev
     public RetrievalAccessScope? AccessScope { get; init; }
 }
 public sealed record PromptMessage(string Role, string Content);
-public sealed record PromptPackage(IReadOnlyList<PromptMessage> Messages, IReadOnlyList<KnowledgeItem> Sources, int EstimatedTokens, string OriginalQuestion);
-public sealed record ModelResponse(string Content, int? PromptTokens, int? CompletionTokens, string? FinishReason, bool HasToolCalls, double? FirstTokenLatencyMs);
+public sealed record PromptPackage(IReadOnlyList<PromptMessage> Messages, IReadOnlyList<KnowledgeItem> Sources, int EstimatedTokens, string OriginalQuestion)
+{
+    public IReadOnlyList<Tools.ToolDefinition> Tools { get; init; } = [];
+}
+public sealed record ModelResponse(string Content, int? PromptTokens, int? CompletionTokens, string? FinishReason, bool HasToolCalls, double? FirstTokenLatencyMs)
+{
+    public IReadOnlyList<Tools.ToolCall> ToolCalls { get; init; } = [];
+}
 public sealed record ResponseValidationResult(ValidationStatus Status, string Answer, IReadOnlyList<string> CitedSourceIds, IReadOnlyList<string> Reasons);
 public sealed record AiSource(string SourceId, string SourceType, string Title, string? Version);
 public sealed record AiMetrics(long TotalLatencyMs, long IntentLatencyMs, long RetrievalLatencyMs, long PromptLatencyMs, long ModelLatencyMs, long ValidationLatencyMs, int? PromptTokens, int? CompletionTokens, int ContextTokens);
@@ -91,6 +97,7 @@ public static class ErrorCodes
     public const string OllamaInvalidResponse = "AI_OLLAMA_INVALID_RESPONSE";
     public const string InvalidCitation = "AI_INVALID_CITATION";
     public const string UnsupportedTool = "AI_TOOL_UNSUPPORTED";
+    public const string ToolLimitExceeded = "AI_TOOL_LIMIT_EXCEEDED";
     public const string RetrievalAccessContextInvalid = "AI_RETRIEVAL_ACCESS_CONTEXT_INVALID";
     public const string RetrievalFilterIntegrity = "AI_RETRIEVAL_FILTER_INTEGRITY";
     public const string GraphUnavailable = "AI_GRAPH_UNAVAILABLE";

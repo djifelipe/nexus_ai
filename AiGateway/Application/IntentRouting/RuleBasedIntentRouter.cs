@@ -1,11 +1,12 @@
 using System.Globalization;
 using System.Text;
 using AiGateway.Domain;
+using AiGateway.Domain.Tools;
 using Microsoft.Extensions.Options;
 
 namespace AiGateway.Application.IntentRouting;
 
-public sealed class RuleBasedIntentRouter(IIntentCatalog catalog, IOptions<AiGatewayOptions> options) : IIntentRouter
+public sealed class RuleBasedIntentRouter(IIntentCatalog catalog, IOptions<AiGatewayOptions> options, IToolCatalog tools) : IIntentRouter
 {
     public async Task<IntentResult> RouteAsync(IntentRouterRequest request, CancellationToken cancellationToken)
     {
@@ -27,8 +28,9 @@ public sealed class RuleBasedIntentRouter(IIntentCatalog catalog, IOptions<AiGat
 
         var candidates = scored.Where(x => x.Score >= options.Value.UnknownThreshold && (best.Score <= options.Value.MultiModuleThreshold || x == best))
             .Select(x => x.Entry.Module).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var requiredTools = RequiredTools(best.Entry, tools);
         return new(best.Entry.Module, best.Entry.Feature, best.Entry.Action, best.Entry.Entity, best.Entry.Type,
-            Math.Clamp(best.Score, 0, 1), tokens.ToArray(), [], false, null, best.ContextMatched ? "rules:screen-context" : "rules:catalog-term", candidates);
+            Math.Clamp(best.Score, 0, 1), tokens.ToArray(), requiredTools, false, null, best.ContextMatched ? "rules:screen-context" : "rules:catalog-term", candidates);
     }
 
     private static (IntentCatalogEntry Entry, double Score, bool ContextMatched) Score(IntentCatalogEntry entry, string normalized, HashSet<string> tokens, ScreenContext screen)
@@ -51,4 +53,24 @@ public sealed class RuleBasedIntentRouter(IIntentCatalog catalog, IOptions<AiGat
     }
 
     private static IntentResult Unknown(HashSet<string> tokens) => new(null, null, null, null, IntentType.Unknown, 0, tokens.ToArray(), [], false, null, "rules:no-match", []);
+
+    private static IReadOnlyList<string> RequiredTools(IntentCatalogEntry entry, IToolCatalog tools)
+    {
+        string? name = entry.Type switch
+        {
+            IntentType.PermissionCheck => ReadOnlyToolNames.PermissionCheck,
+            IntentType.DataQuery when Contains(entry, "estoque", "produto", "saldo", "inventario") => ReadOnlyToolNames.InventoryGetBalance,
+            IntentType.DataQuery when Contains(entry, "documento", "invoice", "nota", "nfe", "nf-e") => ReadOnlyToolNames.InvoiceGetStatus,
+            IntentType.DataQuery when Contains(entry, "cliente", "customer", "crm", "cadastro") => ReadOnlyToolNames.CustomerGetSummary,
+            IntentType.HowTo when !string.IsNullOrWhiteSpace(entry.Action) => ReadOnlyToolNames.WorkflowGet,
+            _ => null
+        };
+        return name is not null && tools.TryGet(name, out _) ? [name] : [];
+    }
+
+    private static bool Contains(IntentCatalogEntry entry, params string[] terms)
+    {
+        var text = Normalize(string.Join(' ', new[] { entry.Module, entry.Feature, entry.Action, entry.Entity }.Where(x => x is not null)!));
+        return terms.Any(term => text.Contains(Normalize(term), StringComparison.Ordinal));
+    }
 }

@@ -79,3 +79,36 @@ public sealed class OllamaOptions
     [Range(32, 4_096)] public int MaxOutputTokens { get; init; } = 256;
     [Range(1, 300)] public int TimeoutSeconds { get; init; } = 8;
 }
+
+public sealed class ReadOnlyToolsOptions
+{
+    public const string SectionName = "ReadOnlyTools";
+    [Range(1, 5)] public int MaxCallsPerRequest { get; init; } = 5;
+    [Range(1, 2)] public int MaxCallsPerTool { get; init; } = 2;
+    [Range(1, 60)] public int TimeoutSeconds { get; init; } = 10;
+    public string[] Enabled { get; init; } = [];
+    public string[] CustomerSummaryAllowedFields { get; init; } = ["displayName", "status", "city", "state"];
+}
+
+public sealed class ErpMcpOptions
+{
+    public const string SectionName = "Mcp:Erp";
+    [Required] public string ServerName { get; init; } = "supabase-mcp-server_ts";
+    [Required] public string Transport { get; init; } = "Stdio";
+    public string? Endpoint { get; init; }
+    public string Command { get; init; } = "npx";
+    public string[] Arguments { get; init; } = [];
+    public string CredentialEnvironmentVariable { get; init; } = "SUPABASE_ACCESS_TOKEN_TS";
+    [Range(1, 60)] public int TimeoutSeconds { get; init; } = 10;
+    public string InventoryOperation { get; init; } = "inventory_get_balance";
+    public string InvoiceOperation { get; init; } = "invoice_get_status";
+    public string PermissionOperation { get; init; } = "permission_check";
+    public string CustomerOperation { get; init; } = "customer_get_summary";
+}
+
+public sealed class WorkflowToolMcpOptions
+{
+    public const string SectionName = "Mcp:WorkflowTools";
+    [Required] public string ServerName { get; init; } = "supabase-mcp-server_kb";
+    public string Operation { get; init; } = "workflow_get";
+}
